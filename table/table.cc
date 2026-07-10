@@ -12,6 +12,7 @@
 #include "table/block.h"
 #include "table/filter_block.h"
 #include "table/format.h"
+#include "table/learned_index.h"
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
 
@@ -22,6 +23,7 @@ struct Table::Rep {
     delete filter;
     delete[] filter_data;
     delete index_block;
+    delete learned;
   }
 
   Options options;
@@ -33,6 +35,7 @@ struct Table::Rep {
 
   BlockHandle metaindex_handle;  // Handle to metaindex_block: saved from footer
   Block* index_block;
+  LearnedIndex* learned;  // opcional
 };
 
 Status Table::Open(const Options& options, RandomAccessFile* file,
@@ -72,6 +75,14 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
     rep->cache_id = (options.block_cache ? options.block_cache->NewId() : 0);
     rep->filter_data = nullptr;
     rep->filter = nullptr;
+    rep->learned = nullptr;
+    if (options.use_learned_index) {
+      // entrenamos una sola vez, el index block ya esta en memoria
+      Iterator* iiter = index_block->NewIterator(options.comparator);
+      rep->learned = new LearnedIndex();
+      rep->learned->Build(iiter, options.comparator, options.plr_error);
+      delete iiter;
+    }
     *table = new Table(rep);
     (*table)->ReadMeta(footer);
   }
@@ -215,17 +226,32 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k, void* arg,
                           void (*handle_result)(void*, const Slice&,
                                                 const Slice&)) {
   Status s;
-  Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
-  iiter->Seek(k);
-  if (iiter->Valid()) {
-    Slice handle_value = iiter->value();
+
+  // si el modelo responde usamos su bloque, si no la busqueda binaria de siempre
+  Slice handle_value;
+  bool have_block = false;
+  Iterator* iiter = nullptr;
+  if (rep_->learned != nullptr && rep_->learned->ok() &&
+      rep_->learned->Lookup(k, &handle_value)) {
+    have_block = true;
+  } else {
+    iiter = rep_->index_block->NewIterator(rep_->options.comparator);
+    iiter->Seek(k);
+    if (iiter->Valid()) {
+      handle_value = iiter->value();
+      have_block = true;
+    }
+  }
+
+  if (have_block) {
     FilterBlockReader* filter = rep_->filter;
     BlockHandle handle;
-    if (filter != nullptr && handle.DecodeFrom(&handle_value).ok() &&
+    Slice filter_input = handle_value;  // DecodeFrom mueve su argumento asi que copiamos
+    if (filter != nullptr && handle.DecodeFrom(&filter_input).ok() &&
         !filter->KeyMayMatch(handle.offset(), k)) {
       // Not found
     } else {
-      Iterator* block_iter = BlockReader(this, options, iiter->value());
+      Iterator* block_iter = BlockReader(this, options, handle_value);
       block_iter->Seek(k);
       if (block_iter->Valid()) {
         (*handle_result)(arg, block_iter->key(), block_iter->value());
@@ -234,7 +260,7 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k, void* arg,
       delete block_iter;
     }
   }
-  if (s.ok()) {
+  if (s.ok() && iiter != nullptr) {
     s = iiter->status();
   }
   delete iiter;

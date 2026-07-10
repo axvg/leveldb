@@ -145,6 +145,12 @@ struct LEVELDB_EXPORT Options {
   // Many applications will benefit from passing the result of
   // NewBloomFilterPolicy() here.
   const FilterPolicy* filter_policy = nullptr;
+
+  // usa el indice PLR en las lecturas, en false leveldb queda igual
+  bool use_learned_index = false;
+
+  // epsilon del PLR, mas grande da modelo mas chico y ventana mas ancha
+  int plr_error = 8;
 };
 
 // Options that control read operations

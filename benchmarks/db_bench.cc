@@ -109,6 +109,12 @@ static int FLAGS_open_files = 0;
 // Negative means use default settings.
 static int FLAGS_bloom_bits = -1;
 
+// usa el indice PLR en las lecturas de punto
+static bool FLAGS_use_learned_index = false;
+
+// epsilon del PLR
+static int FLAGS_plr_error = 8;
+
 // Common key prefix length.
 static int FLAGS_key_prefix = 0;
 
@@ -813,6 +819,8 @@ class Benchmark {
     }
     options.max_open_files = FLAGS_open_files;
     options.filter_policy = filter_policy_;
+    options.use_learned_index = FLAGS_use_learned_index;
+    options.plr_error = FLAGS_plr_error;
     options.reuse_logs = FLAGS_reuse_logs;
     options.compression =
         FLAGS_compression ? kSnappyCompression : kNoCompression;
@@ -1113,6 +1121,11 @@ int main(int argc, char** argv) {
       FLAGS_cache_size = n;
     } else if (sscanf(argv[i], "--bloom_bits=%d%c", &n, &junk) == 1) {
       FLAGS_bloom_bits = n;
+    } else if (sscanf(argv[i], "--use_learned_index=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      FLAGS_use_learned_index = n;
+    } else if (sscanf(argv[i], "--plr_error=%d%c", &n, &junk) == 1) {
+      FLAGS_plr_error = n;
     } else if (sscanf(argv[i], "--open_files=%d%c", &n, &junk) == 1) {
       FLAGS_open_files = n;
     } else if (strncmp(argv[i], "--db=", 5) == 0) {

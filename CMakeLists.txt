@@ -164,8 +164,12 @@ target_sources(leveldb
     "table/format.h"
     "table/iterator_wrapper.h"
     "table/iterator.cc"
+    "table/learned_index.cc"
+    "table/learned_index.h"
     "table/merger.cc"
     "table/merger.h"
+    "table/plr.cc"
+    "table/plr.h"
     "table/table_builder.cc"
     "table/table.cc"
     "table/two_level_iterator.cc"
@@ -340,6 +344,8 @@ if(LEVELDB_BUILD_TESTS)
         "db/write_batch_test.cc"
         "helpers/memenv/memenv_test.cc"
         "table/filter_block_test.cc"
+        "table/learned_index_test.cc"
+        "table/plr_test.cc"
         "table/table_test.cc"
         "util/arena_test.cc"
         "util/bloom_test.cc"
@@ -439,6 +445,12 @@ if(LEVELDB_BUILD_BENCHMARKS)
 
   if(NOT BUILD_SHARED_LIBS)
     leveldb_benchmark("benchmarks/db_bench.cc")
+
+    # tamano del modelo vs epsilon
+    add_executable(model_stats "benchmarks/learned/model_stats.cc")
+    target_link_libraries(model_stats leveldb)
+    target_include_directories(model_stats PRIVATE "${PROJECT_SOURCE_DIR}")
+    target_compile_definitions(model_stats PRIVATE ${LEVELDB_PLATFORM_NAME}=1)
   endif(NOT BUILD_SHARED_LIBS)
 
   check_library_exists(sqlite3 sqlite3_open "" HAVE_SQLITE3)
